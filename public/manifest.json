@@ -2,20 +2,21 @@
   "name": "SPEND - Expense Planning Tracker",
   "short_name": "SPEND",
   "description": "Your offline expense planning tracker that works without internet",
-  "start_url": "/",
+  "start_url": ".",
+  "scope": ".",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#10b981",
   "orientation": "portrait-primary",
   "icons": [
     {
-      "src": "/icon-192.png",
+      "src": "icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "/icon-512.png",
+      "src": "icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
@@ -28,10 +29,10 @@
       "name": "Add Expense",
       "short_name": "Add",
       "description": "Quickly add a new expense plan",
-      "url": "/",
+      "url": ".",
       "icons": [
         {
-          "src": "/icon-192.png",
+          "src": "icon-192.png",
           "sizes": "192x192"
         }
       ]

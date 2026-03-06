@@ -29,6 +29,7 @@ function AppInner() {
   const deferredPromptRef = useRef<BeforeInstallPromptEvent | null>(null);
   const toast = useToast();
   const importInputRef = useRef<HTMLInputElement | null>(null);
+  const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent);
 
   useEffect(() => {
     const savedItems = storage.getItems();
@@ -186,6 +187,15 @@ function AppInner() {
                   title="Install app"
                 >
                   Install App
+                </button>
+              )}
+              {!canInstall && isIos && (
+                <button
+                  onClick={() => toast.show('iOS: Share → Add to Home Screen', 'info')}
+                  className="px-3 py-2 rounded-xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+                  title="Install on iOS"
+                >
+                  iOS Install Tips
                 </button>
               )}
               {storage.hasPin() && (

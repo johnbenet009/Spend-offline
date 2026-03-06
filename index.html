@@ -2,13 +2,13 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <link rel="icon" type="image/svg+xml" href="icon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#10b981" />
     <meta name="description" content="Your offline expense planning tracker that works without internet" />
     <title>SPEND - Expense Planning Tracker</title>
-    <link rel="manifest" href="/manifest.json" />
-    <link rel="apple-touch-icon" href="/icon-192.png" />
+    <link rel="manifest" href="manifest.json" />
+    <link rel="apple-touch-icon" href="icon-192.png" />
     <meta property="og:title" content="SPEND - Expense Planning Tracker" />
     <meta property="og:description" content="Your offline expense planning tracker" />
     <meta property="og:image" content="https://bolt.new/static/og_default.png" />
@@ -18,10 +18,11 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
-    <script>
+    <script type="module">
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js').then(
+          const swUrl = `${import.meta.env.BASE_URL}sw.js`;
+          navigator.serviceWorker.register(swUrl).then(
             (registration) => {
               console.log('ServiceWorker registered:', registration.scope);
             },
