@@ -29,10 +29,12 @@ export const storage = {
 
   addItem(item: Omit<ExpenseItem, 'id' | 'dateCreated' | 'completed'>): ExpenseItem {
     const items = this.getItems();
+    const now = new Date().toISOString();
     const newItem: ExpenseItem = {
       ...item,
       id: crypto.randomUUID(),
-      dateCreated: new Date().toISOString(),
+      dateCreated: now,
+      lastModified: now,
       completed: false,
     };
     items.push(newItem);
@@ -44,7 +46,7 @@ export const storage = {
     const items = this.getItems();
     const index = items.findIndex(item => item.id === id);
     if (index !== -1) {
-      items[index] = { ...items[index], ...updates };
+      items[index] = { ...items[index], ...updates, lastModified: new Date().toISOString() };
       this.saveItems(items);
     }
   },
@@ -169,7 +171,7 @@ export const storage = {
     return JSON.stringify(payload, null, 2);
   },
 
-  importData(json: string): { ok: boolean; error?: string } {
+  parseImport(json: string): { ok: boolean; error?: string; data?: { items: ExpenseItem[]; availableMoney: number; currency: CurrencySettings; exportedAt?: string } } {
     try {
       const parsed = JSON.parse(json);
       if (!parsed || typeof parsed !== 'object' || !parsed.data) {
@@ -179,13 +181,34 @@ export const storage = {
       if (!Array.isArray(items)) return { ok: false, error: 'Missing items' };
       if (typeof availableMoney !== 'number') return { ok: false, error: 'Missing available money' };
       if (!currency || typeof currency.symbol !== 'string') return { ok: false, error: 'Missing currency' };
-      this.saveItems(items as ExpenseItem[]);
-      this.saveAvailableMoney(availableMoney);
-      this.saveCurrency(currency as CurrencySettings);
-      return { ok: true };
+      return { ok: true, data: { items: items as ExpenseItem[], availableMoney, currency, exportedAt: parsed.exportedAt } };
     } catch {
       return { ok: false, error: 'Could not parse file' };
     }
+  },
+
+  findConflicts(importedItems: ExpenseItem[]) {
+    const local = this.getItems();
+    const localMap = new Map<string, ExpenseItem>();
+    for (const it of local) localMap.set(it.id, it);
+
+    const conflicts: { id: string; localItem: ExpenseItem; importedItem: ExpenseItem }[] = [];
+    const toAdd: ExpenseItem[] = [];
+
+    for (const imp of importedItems) {
+      const existing = localMap.get(imp.id);
+      if (existing) {
+        // simple deep-inequality check for conflict
+        const same = JSON.stringify(existing) === JSON.stringify(imp);
+        if (!same) {
+          conflicts.push({ id: imp.id, localItem: existing, importedItem: imp });
+        }
+      } else {
+        toAdd.push(imp);
+      }
+    }
+
+    return { conflicts, toAdd };
   },
 
   clearAll(): void {

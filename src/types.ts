@@ -4,6 +4,7 @@ export interface ExpenseItem {
   amount: number;
   expectedDate?: string;
   dateCreated: string;
+  lastModified?: string;
   completed: boolean;
 }
 

@@ -6,6 +6,7 @@ import { Insights } from './components/Insights';
 import { AddItemForm } from './components/AddItemForm';
 import { ExpenseList } from './components/ExpenseList';
 import { AdviceSection } from './components/AdviceSection';
+import { MergeModal } from './components/MergeModal';
 import { Wallet, Settings as SettingsIcon, Lock } from 'lucide-react';
 import { LockScreen } from './components/LockScreen';
 import { ToastProvider, useToast } from './components/Toast';
@@ -29,6 +30,10 @@ function AppInner() {
   const deferredPromptRef = useRef<BeforeInstallPromptEvent | null>(null);
   const toast = useToast();
   const importInputRef = useRef<HTMLInputElement | null>(null);
+  const [showMergeModal, setShowMergeModal] = useState(false);
+  const [mergeConflicts, setMergeConflicts] = useState<any[]>([]);
+  const [mergeToAdd, setMergeToAdd] = useState<any[]>([]);
+  const [incomingPayload, setIncomingPayload] = useState<null | { items: any[]; availableMoney: number; currency: CurrencySettings }>(null);
   const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent);
 
   useEffect(() => {
@@ -156,6 +161,55 @@ function AppInner() {
   const lockNow = () => {
     sessionStorage.removeItem('spend_unlocked_session');
     setLocked(true);
+  };
+
+  const handleCloseMerge = () => {
+    setShowMergeModal(false);
+    setMergeConflicts([]);
+    setMergeToAdd([]);
+    setIncomingPayload(null);
+  };
+
+  const handleApplyMerge = (result: { keepIds: Record<string, 'local' | 'imported'>; addIds: string[]; chosenAvailable: 'local' | 'imported'; chosenCurrency: 'local' | 'imported' }) => {
+    if (!incomingPayload) return;
+    const local = storage.getItems();
+    const localMap = new Map(local.map(i => [i.id, i] as [string, ExpenseItem]));
+
+    // apply conflicts choices
+    for (const c of mergeConflicts) {
+      const choice = result.keepIds[c.id];
+      if (choice === 'imported') {
+        // replace local with imported
+        const idx = local.findIndex((x) => x.id === c.id);
+        if (idx !== -1) {
+          local[idx] = c.importedItem;
+        }
+      }
+      // if local chosen, do nothing
+    }
+
+    // add selected new items
+    const toAddMap = new Map(incomingPayload.items.map(i => [i.id, i] as [string, ExpenseItem]));
+    for (const id of result.addIds) {
+      const it = toAddMap.get(id);
+      if (it && !localMap.has(id)) local.push(it);
+    }
+
+    storage.saveItems(local);
+
+    // available money
+    if (result.chosenAvailable === 'imported') storage.saveAvailableMoney(incomingPayload.availableMoney);
+
+    // currency
+    if (result.chosenCurrency === 'imported') storage.saveCurrency(incomingPayload.currency);
+
+    setItems(storage.getItems());
+    setAvailableMoney(storage.getAvailableMoney());
+    setCurrency(storage.getCurrency());
+    setCurrencyLabelInput(storage.getCurrency().label);
+    setCurrencySymbolInput(storage.getCurrency().symbol);
+    toast.show('Merge applied', 'success');
+    handleCloseMerge();
   };
 
   return (
@@ -333,6 +387,25 @@ function AppInner() {
                 >
                   Import Data
                 </button>
+                <button
+                  onClick={() => {
+                    const data = storage.exportData();
+                    navigator.clipboard.writeText(data).then(() => {
+                      const msg = encodeURIComponent('📊 Here\'s my SPEND budget data! 💰\n\nTo import:\n1. Open SPEND app\n2. Go to Settings → Backup & Restore\n3. Click "Import Data"\n4. Use the attached JSON file\n\nThis allows us to sync budgets and share expenses easily! 🎯');
+                      const waLink = `https://wa.me/?text=${msg}`;
+                      window.open(waLink, '_blank');
+                      toast.show('Data copied to clipboard. Share the JSON file via WhatsApp!', 'success');
+                    }).catch(() => {
+                      const msg = encodeURIComponent('📊 Here\'s my SPEND budget data! 💰\n\nTo import:\n1. Open SPEND app\n2. Go to Settings → Backup & Restore\n3. Click "Import Data"\n4. Use the attached JSON file\n\nThis allows us to sync budgets and share expenses easily! 🎯');
+                      const waLink = `https://wa.me/?text=${msg}`;
+                      window.open(waLink, '_blank');
+                      toast.show('Data export ready. Download the backup file and attach it to WhatsApp!', 'success');
+                    });
+                  }}
+                  className="px-4 py-2 rounded-lg bg-green-500 hover:bg-green-600 text-white font-semibold"
+                >
+                  📱 Share via WhatsApp
+                </button>
                 <input
                   ref={importInputRef}
                   type="file"
@@ -342,22 +415,42 @@ function AppInner() {
                     const file = e.target.files?.[0];
                     if (!file) return;
                     const text = await file.text();
-                    const res = storage.importData(text);
-                    if (res.ok) {
+                    const parsed = storage.parseImport(text);
+                    if (!parsed.ok) {
+                      toast.show(parsed.error || 'Import failed', 'error');
+                      e.currentTarget.value = '';
+                      return;
+                    }
+                    const data = parsed.data!;
+                    const conflictsResult = storage.findConflicts(data.items);
+                    const localAvailable = storage.getAvailableMoney();
+                    const localCurrency = storage.getCurrency();
+
+                    // If there are conflicts or available/currency differ, show merge modal
+                    if (conflictsResult.conflicts.length > 0 || data.availableMoney !== localAvailable || JSON.stringify(data.currency) !== JSON.stringify(localCurrency)) {
+                      setMergeConflicts(conflictsResult.conflicts);
+                      setMergeToAdd(conflictsResult.toAdd);
+                      setIncomingPayload({ items: data.items, availableMoney: data.availableMoney, currency: data.currency });
+                      setShowMergeModal(true);
+                    } else {
+                      // simple merge: add non-duplicate items
+                      const local = storage.getItems();
+                      const merged = [...local, ...conflictsResult.toAdd];
+                      storage.saveItems(merged);
+                      // keep local available money and currency by default
                       setItems(storage.getItems());
                       setAvailableMoney(storage.getAvailableMoney());
                       setCurrency(storage.getCurrency());
                       setCurrencyLabelInput(storage.getCurrency().label);
                       setCurrencySymbolInput(storage.getCurrency().symbol);
-                      toast.show('Data imported', 'success');
-                    } else {
-                      toast.show(res.error || 'Import failed', 'error');
+                      toast.show('Data merged successfully', 'success');
                     }
+
                     e.currentTarget.value = '';
                   }}
                 />
               </div>
-              <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">PIN and session are not exported for your security.</p>
+              <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">PIN and session are not exported for your security. Use WhatsApp share to send your budget to your partner instantly!</p>
             </div>
           </div>
         )}
@@ -388,6 +481,18 @@ function AppInner() {
             />
           </div>
         </div>
+
+        <MergeModal
+          open={showMergeModal}
+          conflicts={mergeConflicts}
+          toAdd={mergeToAdd}
+          localAvailable={availableMoney}
+          importedAvailable={incomingPayload?.availableMoney ?? 0}
+          localCurrency={currency}
+          importedCurrency={incomingPayload?.currency ?? currency}
+          onClose={handleCloseMerge}
+          onApply={handleApplyMerge}
+        />
 
         <footer className="mt-12 text-center text-sm text-gray-500 dark:text-gray-400">
           <p>All data stored locally on your device. Works completely offline.</p>
